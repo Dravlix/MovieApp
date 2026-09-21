@@ -54,7 +54,7 @@ const handleMouseLeave = () => {
     @mouseenter="handleMouseEnter"
     @mouseleave="handleMouseLeave"
     class="group relative flex-none w-40 md:w-48 aspect-[2/3] cursor-pointer snap-start transition-all"
-    :class="(isHovered || isAnimatingOut) ? 'z-50' : 'z-10'"
+    :class="[isHovered ? 'z-50' : (isAnimatingOut ? 'z-40' : 'z-10')]"
   >
     <!-- Expandující Hover Karta -->
     <div class="absolute top-0 left-0 h-full w-full bg-[#141414] rounded-xl transition-all duration-300 ease-out shadow-lg overflow-hidden flex ring-1 ring-transparent group-hover:w-[145%] group-hover:-translate-y-2 group-hover:scale-110 group-hover:shadow-[0_20px_50px_rgba(0,0,0,0.6)] group-hover:ring-neutral-700">
