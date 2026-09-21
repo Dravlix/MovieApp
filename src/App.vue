@@ -6,6 +6,7 @@ import SeriesView from './views/SeriesView.vue'
 import WishlistView from './views/WishlistView.vue'
 import DetailView from './views/DetailView.vue'
 import CollectionsView from './views/CollectionsView.vue'
+import CollectionView from './views/CollectionView.vue'
 
 // Jednoduchý stavový router s podporou parametrů a historie
 const currentRoute = ref('home')
@@ -40,7 +41,8 @@ const routes = {
   series: SeriesView,
   wishlist: WishlistView,
   detail: DetailView,
-  collections: CollectionsView
+  collections: CollectionsView,
+  collection: CollectionView
 }
 
 const currentView = computed(() => routes[currentRoute.value as keyof typeof routes] || HomeView)
