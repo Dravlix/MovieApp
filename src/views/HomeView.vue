@@ -1,15 +1,30 @@
 <script setup lang="ts">
-import { inject } from 'vue';
-import { featuredMovie, homeCategories } from '../data/mockData';
+import { inject, ref, onMounted } from 'vue';
+import { invoke } from '@tauri-apps/api/core';
 import MediaRow from '../components/MediaRow.vue';
+import type { Category, MediaItem } from '../types';
 
 const navigate = inject<Function>('navigate');
+
+const homeCategories = ref<Category[]>([]);
+const featuredMovie = ref<MediaItem | null>(null);
+
+onMounted(async () => {
+  try {
+    homeCategories.value = await invoke<Category[]>('get_home_data');
+    if (homeCategories.value.length > 0 && homeCategories.value[0].items.length > 0) {
+      featuredMovie.value = homeCategories.value[0].items[0];
+    }
+  } catch (error) {
+    console.error('Failed to fetch home data:', error);
+  }
+});
 </script>
 
 <template>
   <div>
     <!-- Hero Section -->
-    <header class="relative w-full h-[85vh] flex items-center">
+    <header v-if="featuredMovie" class="relative w-full h-[85vh] flex items-center">
       <div class="absolute inset-0 z-0">
         <img :src="featuredMovie.backdropUrl" alt="Hero Backdrop" class="w-full h-full object-cover opacity-80" />
         <div class="absolute inset-0 bg-gradient-to-r from-neutral-900 via-neutral-900/60 to-transparent"></div>

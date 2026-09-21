@@ -1,8 +1,26 @@
 <script setup lang="ts">
-import { seriesCategories } from '../data/mockData';
+import { ref, onMounted, computed } from 'vue';
+import { invoke } from '@tauri-apps/api/core';
 import MediaRow from '../components/MediaRow.vue';
+import type { MediaItem, Category } from '../types';
 
-const ambientImage = seriesCategories[0]?.items[0]?.backdropUrl || seriesCategories[0]?.items[0]?.posterUrl;
+const series = ref<MediaItem[]>([]);
+
+const seriesCategories = computed<Category[]>(() => {
+  if (series.value.length === 0) return [];
+  return [{
+    title: 'Všechny seriály',
+    items: series.value
+  }];
+});
+
+const ambientImage = computed(() => {
+  return series.value[0]?.backdropUrl || series.value[0]?.posterUrl;
+});
+
+onMounted(async () => {
+  series.value = await invoke<MediaItem[]>('get_series');
+});
 </script>
 
 <template>

@@ -1,12 +1,34 @@
 <script setup lang="ts">
-import { inject } from 'vue';
+import { inject, ref, onMounted } from 'vue';
+import { invoke } from '@tauri-apps/api/core';
 import { MediaItem } from '../types';
 
-defineProps<{
+const props = defineProps<{
   item?: MediaItem;
 }>();
 
 const navigate = inject<Function>('navigate');
+const inWishlist = ref(false);
+
+onMounted(async () => {
+  if (props.item) {
+    try {
+      inWishlist.value = await invoke<boolean>('check_wishlist', { id: props.item.id });
+    } catch (e) {
+      console.error(e);
+    }
+  }
+});
+
+const toggleWishlist = async () => {
+  if (props.item) {
+    try {
+      inWishlist.value = await invoke<boolean>('toggle_wishlist', { id: props.item.id });
+    } catch (e) {
+      console.error(e);
+    }
+  }
+};
 </script>
 
 <template>
@@ -67,11 +89,14 @@ const navigate = inject<Function>('navigate');
             Přehrát
           </button>
           
-          <button class="flex items-center gap-2 px-8 py-4 bg-neutral-800/80 backdrop-blur-md text-white font-bold rounded-md hover:bg-neutral-700/80 hover:scale-105 transition-all duration-300 border border-neutral-600">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-7 h-7">
+          <button @click="toggleWishlist" class="flex items-center gap-2 px-8 py-4 bg-neutral-800/80 backdrop-blur-md text-white font-bold rounded-md hover:bg-neutral-700/80 hover:scale-105 transition-all duration-300 border border-neutral-600">
+            <svg v-if="!inWishlist" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-7 h-7">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
-            Do wishlistu
+            <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-7 h-7 text-violet-500">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+            {{ inWishlist ? 'Ve wishlistu' : 'Do wishlistu' }}
           </button>
         </div>
       </div>

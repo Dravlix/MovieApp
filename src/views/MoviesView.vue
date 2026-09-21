@@ -1,9 +1,26 @@
 <script setup lang="ts">
-import { movieCategories } from '../data/mockData';
+import { ref, onMounted, computed } from 'vue';
+import { invoke } from '@tauri-apps/api/core';
 import MediaRow from '../components/MediaRow.vue';
+import type { MediaItem, Category } from '../types';
 
-// Použijeme první film jako zdroj pro ambientní rozmazané pozadí
-const ambientImage = movieCategories[0]?.items[0]?.backdropUrl || movieCategories[0]?.items[0]?.posterUrl;
+const movies = ref<MediaItem[]>([]);
+
+const movieCategories = computed<Category[]>(() => {
+  if (movies.value.length === 0) return [];
+  return [{
+    title: 'Všechny filmy',
+    items: movies.value
+  }];
+});
+
+const ambientImage = computed(() => {
+  return movies.value[0]?.backdropUrl || movies.value[0]?.posterUrl;
+});
+
+onMounted(async () => {
+  movies.value = await invoke<MediaItem[]>('get_movies');
+});
 </script>
 
 <template>

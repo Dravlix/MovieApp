@@ -1,8 +1,18 @@
 <script setup lang="ts">
-import { wishlistData } from '../data/mockData';
+import { ref, onMounted, computed } from 'vue';
+import { invoke } from '@tauri-apps/api/core';
 import MediaCard from '../components/MediaCard.vue';
+import type { MediaItem } from '../types';
 
-const ambientImage = wishlistData[0]?.backdropUrl || wishlistData[0]?.posterUrl;
+const wishlistData = ref<MediaItem[]>([]);
+
+const ambientImage = computed(() => {
+  return wishlistData.value[0]?.backdropUrl || wishlistData.value[0]?.posterUrl;
+});
+
+onMounted(async () => {
+  wishlistData.value = await invoke<MediaItem[]>('get_wishlist');
+});
 </script>
 
 <template>

@@ -1,8 +1,18 @@
 <script setup lang="ts">
-import { allCollections } from '../data/mockData';
+import { ref, onMounted, computed } from 'vue';
+import { invoke } from '@tauri-apps/api/core';
 import MediaRow from '../components/MediaRow.vue';
+import type { Category } from '../types';
 
-const ambientImage = allCollections[0]?.items[0]?.backdropUrl || allCollections[0]?.items[0]?.posterUrl;
+const allCollections = ref<Category[]>([]);
+
+const ambientImage = computed(() => {
+  return allCollections.value[0]?.items[0]?.backdropUrl || allCollections.value[0]?.items[0]?.posterUrl;
+});
+
+onMounted(async () => {
+  allCollections.value = await invoke<Category[]>('get_all_collections');
+});
 </script>
 
 <template>

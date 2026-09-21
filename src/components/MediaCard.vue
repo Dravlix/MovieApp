@@ -1,12 +1,31 @@
 <script setup lang="ts">
-import { inject } from 'vue';
+import { inject, ref, onMounted } from 'vue';
+import { invoke } from '@tauri-apps/api/core';
 import { MediaItem } from '../types';
 
-defineProps<{
+const props = defineProps<{
   item: MediaItem;
 }>();
 
 const navigate = inject<Function>('navigate');
+
+const inWishlist = ref(false);
+
+onMounted(async () => {
+  try {
+    inWishlist.value = await invoke<boolean>('check_wishlist', { id: props.item.id });
+  } catch (e) {
+    console.error(e);
+  }
+});
+
+const toggleWishlist = async () => {
+  try {
+    inWishlist.value = await invoke<boolean>('toggle_wishlist', { id: props.item.id });
+  } catch (e) {
+    console.error(e);
+  }
+};
 </script>
 
 <template>
@@ -43,9 +62,12 @@ const navigate = inject<Function>('navigate');
               </svg>
             </button>
             <!-- Přidat -->
-            <button class="w-8 h-8 flex items-center justify-center bg-neutral-800/80 border border-neutral-500 text-white rounded-full hover:border-white hover:scale-110 transition-all backdrop-blur-sm">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+            <button @click.stop="toggleWishlist" class="w-8 h-8 flex items-center justify-center bg-neutral-800/80 border border-neutral-500 text-white rounded-full hover:border-white hover:scale-110 transition-all backdrop-blur-sm">
+              <svg v-if="!inWishlist" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 text-violet-500">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
               </svg>
             </button>
           </div>
