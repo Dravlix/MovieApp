@@ -13,6 +13,12 @@ const ambientImage = computed(() => {
 onMounted(async () => {
   wishlistData.value = await invoke<MediaItem[]>('get_wishlist');
 });
+
+const handleWishlistUpdate = (id: string, inWishlist: boolean) => {
+  if (!inWishlist) {
+    wishlistData.value = wishlistData.value.filter(item => item.id !== id);
+  }
+};
 </script>
 
 <template>
@@ -29,16 +35,38 @@ onMounted(async () => {
         <p class="text-neutral-400 mt-2 font-medium">Filmy a seriály, které si chcete pustit později.</p>
       </div>
       
-      <div v-if="wishlistData.length > 0" class="flex flex-wrap gap-4">
+      <TransitionGroup 
+        v-if="wishlistData.length > 0" 
+        name="list" 
+        tag="div" 
+        class="flex flex-wrap gap-x-6 gap-y-12 py-8 pr-12 md:pr-32"
+      >
         <MediaCard 
           v-for="item in wishlistData" 
           :key="item.id" 
           :item="item" 
+          @wishlistUpdated="handleWishlistUpdate"
         />
-      </div>
+      </TransitionGroup>
       <div v-else class="text-neutral-500 font-medium">
         Zatím tu nic nemáte.
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.list-move,
+.list-enter-active,
+.list-leave-active {
+  transition: all 0.5s ease;
+}
+.list-enter-from,
+.list-leave-to {
+  opacity: 0;
+  transform: scale(0.9);
+}
+.list-leave-active {
+  position: absolute;
+}
+</style>

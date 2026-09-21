@@ -61,7 +61,7 @@ const heroItem = props.item?.items[0];
     <!-- Seznam všech filmů v kolekci -->
     <main class="relative z-10 px-8 pt-8 md:px-20">
       <h3 class="text-2xl font-bold text-white mb-6">Vše v této kolekci</h3>
-      <div class="flex flex-wrap gap-4">
+      <div class="flex flex-wrap gap-x-6 gap-y-12 py-8 pr-12 md:pr-32">
         <MediaCard 
           v-for="subItem in item.items" 
           :key="subItem.id" 

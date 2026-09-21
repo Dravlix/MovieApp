@@ -7,9 +7,14 @@ const props = defineProps<{
   item: MediaItem;
 }>();
 
+const emit = defineEmits(['wishlistUpdated']);
+
 const navigate = inject<Function>('navigate');
 
 const inWishlist = ref(false);
+const isHovered = ref(false);
+const isAnimatingOut = ref(false);
+let hoverTimeout: any = null;
 
 onMounted(async () => {
   try {
@@ -22,16 +27,37 @@ onMounted(async () => {
 const toggleWishlist = async () => {
   try {
     inWishlist.value = await invoke<boolean>('toggle_wishlist', { id: props.item.id });
+    emit('wishlistUpdated', props.item.id, inWishlist.value);
   } catch (e) {
     console.error(e);
   }
 };
+
+const handleMouseEnter = () => {
+  clearTimeout(hoverTimeout);
+  isHovered.value = true;
+  isAnimatingOut.value = false;
+};
+
+const handleMouseLeave = () => {
+  isHovered.value = false;
+  isAnimatingOut.value = true;
+  hoverTimeout = setTimeout(() => {
+    isAnimatingOut.value = false;
+  }, 300); // 300ms corresponds to transition duration
+};
 </script>
 
 <template>
-  <div @click="navigate && navigate('detail', item)" class="relative flex-none w-40 md:w-48 aspect-[2/3] group cursor-pointer snap-start">
+  <div 
+    @click="navigate && navigate('detail', item)" 
+    @mouseenter="handleMouseEnter"
+    @mouseleave="handleMouseLeave"
+    class="group relative flex-none w-40 md:w-48 aspect-[2/3] cursor-pointer snap-start transition-all"
+    :class="(isHovered || isAnimatingOut) ? 'z-50' : 'z-10'"
+  >
     <!-- Expandující Hover Karta -->
-    <div class="absolute top-0 left-0 h-full w-full bg-[#141414] rounded-xl transition-all duration-300 ease-out group-hover:w-[145%] group-hover:-translate-y-2 group-hover:scale-110 group-hover:z-50 shadow-lg group-hover:shadow-[0_20px_50px_rgba(0,0,0,0.6)] overflow-hidden flex ring-1 ring-transparent group-hover:ring-neutral-700">
+    <div class="absolute top-0 left-0 h-full w-full bg-[#141414] rounded-xl transition-all duration-300 ease-out shadow-lg overflow-hidden flex ring-1 ring-transparent group-hover:w-[145%] group-hover:-translate-y-2 group-hover:scale-110 group-hover:shadow-[0_20px_50px_rgba(0,0,0,0.6)] group-hover:ring-neutral-700">
       
       <!-- Levá část: Plakát -->
       <div class="w-40 md:w-48 h-full flex-none relative">
