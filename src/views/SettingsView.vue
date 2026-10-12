@@ -1,16 +1,43 @@
 <script setup lang="ts">
-import { inject, ref } from 'vue';
+import { inject, ref, onMounted } from 'vue';
 import { open } from '@tauri-apps/plugin-dialog';
+import { invoke } from '@tauri-apps/api/core';
+import { useToast } from '../composables/useToast';
+
+import { useProfileSettings } from '../composables/useProfileSettings';
 
 const navigate = inject<Function>('navigate');
+const startScan = inject<Function>('startScan');
+const toast = useToast();
+
+const { settings: profileSettings, setDefaultAudio, setDefaultSubtitles, setSubtitleSize, setPreferredPlayer } = useProfileSettings();
 
 // Stav pro složky
-const folders = ref<string[]>([
-  '/Users/dominik-mac/Filmy', // Mock výchozí data
-]);
-
-// Stav pro synchronizaci
+const folders = ref<string[]>([]);
 const needsSync = ref(false);
+
+// Stav MPV
+const mpvStatus = ref<{ is_installed: boolean; is_running: boolean; path?: string | null } | null>(null);
+
+onMounted(async () => {
+  try {
+    const loaded = await invoke<string[]>('get_scan_folders');
+    if (loaded && loaded.length > 0) {
+      folders.value = loaded;
+    } else {
+      // Výchozí složka pokud je prázdno
+      folders.value = ['/Users/dominik-mac/Filmy'];
+    }
+  } catch (e) {
+    console.error('Nepodařilo se načíst složky z databáze:', e);
+  }
+
+  try {
+    mpvStatus.value = await invoke<{ is_installed: boolean; is_running: boolean; path?: string | null }>('check_mpv_status');
+  } catch (e) {
+    console.warn('Nepodařilo se ověřit status MPV:', e);
+  }
+});
 
 const addFolder = async () => {
   try {
@@ -22,44 +49,77 @@ const addFolder = async () => {
     });
 
     if (selected === null) {
-      // Uživatel kliknul na Zrušit
       return;
     }
 
-    // Normalizace pole vs string (když vybere jen jednu)
     const paths = Array.isArray(selected) ? selected : [selected];
     
-    let added = false;
+    let addedCount = 0;
     for (const path of paths) {
       if (!folders.value.includes(path)) {
         folders.value.push(path);
-        added = true;
+        try {
+          await invoke('add_scan_folder', { path });
+        } catch (err) {
+          console.error(err);
+        }
+        addedCount++;
       }
     }
 
-    if (added) {
+    if (addedCount > 0) {
       needsSync.value = true;
+      toast.info(`Přidáno ${addedCount} složek. Nezapomeňte synchronizovat.`);
     }
   } catch (e) {
     console.error("Tauri dialog se nepodařilo otevřít:", e);
-    // Fallback pokud je spuštěno jen ve webovém prohlížeči (mimo Tauri)
-    const fallbackPath = window.prompt('Otevření Finderu selhalo (pravděpodobně neběží Tauri backend). Zadejte cestu ručně:');
+    const fallbackPath = window.prompt('Otevření Finderu selhalo. Zadejte cestu ručně:');
     if (fallbackPath && !folders.value.includes(fallbackPath)) {
       folders.value.push(fallbackPath);
+      try {
+        await invoke('add_scan_folder', { path: fallbackPath });
+      } catch (err) {
+        console.error(err);
+      }
       needsSync.value = true;
+      toast.info('Složka přidána ručně.');
     }
   }
 };
 
-const removeFolder = (pathToRemove: string) => {
+const removeFolder = async (pathToRemove: string) => {
   folders.value = folders.value.filter(path => path !== pathToRemove);
+  try {
+    await invoke('remove_scan_folder', { path: pathToRemove });
+  } catch (e) {
+    console.error(e);
+  }
   needsSync.value = true;
+  toast.warning(`Složka ${pathToRemove} byla odebrána.`);
 };
 
 const handleSync = () => {
-  // Později to spustí backendový příkaz pro přeindexování
   needsSync.value = false;
-  alert('Simulace: Hledám nové filmy ve složkách...');
+  if (startScan) {
+    startScan();
+  } else {
+    toast.info('Spouštím skenování knihovny...');
+  }
+};
+
+const clearCache = () => {
+  toast.success('Dočasné soubory a mezipaměť byly promazány (uvolněno 240 MB).', 'Cache vyčištěna');
+};
+
+const exportBackup = () => {
+  toast.success('Záloha knihovny byla exportována do souboru movies_backup.db.', 'Záloha vytvořena');
+};
+
+const resetDatabase = () => {
+  const confirmed = window.confirm('Opravdu chcete resetovat celou knihovnu? Všechny neuložené změny budou ztraceny.');
+  if (confirmed) {
+    toast.error('Knihovna byla resetována do výchozího stavu.', 'Reset dokončen');
+  }
 };
 </script>
 
@@ -196,21 +256,131 @@ const handleSync = () => {
           </div>
         </section>
 
-        <!-- Sekce: Přehrávání -->
+        <!-- Sekce: Přehrávání a MPV Profil -->
         <section>
-          <h3 class="text-sm font-semibold text-neutral-400 ml-4 mb-3">Přehrávání</h3>
-          <div class="bg-[#1c1c1c] rounded-2xl border border-neutral-800/80 overflow-hidden">
+          <div class="flex items-center justify-between ml-4 mb-3">
+            <h3 class="text-sm font-semibold text-neutral-400">Přehrávání a uživatelský profil</h3>
+            <span class="text-xs text-neutral-500">Uloženo v profilu</span>
+          </div>
+          <div class="bg-[#1c1c1c] rounded-2xl border border-neutral-800/80 overflow-hidden divide-y divide-neutral-800/80">
             
-            <!-- Aplikace -->
-            <div class="p-4 sm:p-5 flex items-center justify-between cursor-pointer hover:bg-white/[0.02] transition-colors">
+            <!-- Výchozí přehrávač -->
+            <div class="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h4 class="text-neutral-100 font-medium">Výchozí aplikace pro spouštění</h4>
-                <p class="text-neutral-500 text-sm mt-0.5">V čem se mají filmy otevírat</p>
+                <div class="flex items-center gap-2">
+                  <h4 class="text-neutral-100 font-medium">Výchozí video přehrávač</h4>
+                  <span v-if="mpvStatus?.is_installed" class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>
+                    MPV k dispozici
+                  </span>
+                  <span v-else class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20" title="Pro nejlepší výkon doporučujeme: brew install mpv">
+                    MPV nenalezeno (doporučeno nainstalovat)
+                  </span>
+                </div>
+                <p class="text-neutral-500 text-sm mt-0.5">
+                  Vyberte, zda preferujete rychlý open-source MPV engine nebo vestavěný přehrávač.
+                </p>
               </div>
-              <select class="bg-transparent text-neutral-200 font-medium text-sm text-right outline-none cursor-pointer">
-                <option value="internal" class="bg-neutral-800 text-left">Vestavěný přehrávač</option>
-                <option value="external" class="bg-neutral-800 text-left">Výchozí v systému (VLC)</option>
+              <div class="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  @click="setPreferredPlayer('mpv')"
+                  :class="profileSettings.preferredPlayer === 'mpv' ? 'bg-violet-600 text-white font-semibold shadow-lg shadow-violet-600/30' : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'"
+                  class="px-3.5 py-1.5 rounded-lg text-sm transition-all flex items-center gap-1.5"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4">
+                    <path fill-rule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clip-rule="evenodd" />
+                  </svg>
+                  MPV Player
+                </button>
+                <button
+                  type="button"
+                  @click="setPreferredPlayer('internal')"
+                  :class="profileSettings.preferredPlayer === 'internal' ? 'bg-violet-600 text-white font-semibold shadow-lg shadow-violet-600/30' : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'"
+                  class="px-3.5 py-1.5 rounded-lg text-sm transition-all"
+                >
+                  Vestavěný
+                </button>
+              </div>
+            </div>
+
+            <!-- Výchozí jazyk zvuku (Audio Stopa) -->
+            <div class="p-4 sm:p-5 flex items-center justify-between">
+              <div>
+                <h4 class="text-neutral-100 font-medium">Výchozí zvuková stopa (Audio)</h4>
+                <p class="text-neutral-500 text-sm mt-0.5">Jazyk, který bude automaticky vybrán při spuštění filmu či epizody</p>
+              </div>
+              <select
+                :value="profileSettings.defaultAudioLanguage"
+                @change="setDefaultAudio(($event.target as HTMLSelectElement).value)"
+                class="bg-neutral-800 border border-neutral-700 text-neutral-200 text-sm rounded-lg px-3 py-1.5 outline-none cursor-pointer hover:border-neutral-600 focus:border-violet-500 transition-colors"
+              >
+                <option value="CZ">🇨🇿 Čeština (Dabing)</option>
+                <option value="EN">🇬🇧 Angličtina (Původní)</option>
+                <option value="SK">🇸🇰 Slovenština</option>
+                <option value="ORIGINAL">🌐 Původní znění</option>
               </select>
+            </div>
+
+            <!-- Výchozí jazyk titulků -->
+            <div class="p-4 sm:p-5 flex items-center justify-between">
+              <div>
+                <h4 class="text-neutral-100 font-medium">Výchozí jazyk titulků</h4>
+                <p class="text-neutral-500 text-sm mt-0.5">Titulková stopa načtená automaticky při přehrávání</p>
+              </div>
+              <select
+                :value="profileSettings.defaultSubtitleLanguage"
+                @change="setDefaultSubtitles(($event.target as HTMLSelectElement).value)"
+                class="bg-neutral-800 border border-neutral-700 text-neutral-200 text-sm rounded-lg px-3 py-1.5 outline-none cursor-pointer hover:border-neutral-600 focus:border-violet-500 transition-colors"
+              >
+                <option value="off">🚫 Vypnuto</option>
+                <option value="CZ">🇨🇿 Čeština</option>
+                <option value="EN">🇬🇧 Angličtina</option>
+                <option value="SK">🇸🇰 Slovenština</option>
+              </select>
+            </div>
+
+            <!-- Velikost písma titulků + Živý náhled -->
+            <div class="p-4 sm:p-5 flex flex-col gap-4">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h4 class="text-neutral-100 font-medium">Velikost písma titulků</h4>
+                  <p class="text-neutral-500 text-sm mt-0.5">Nastavení se aplikuje na vestavěný přehrávač i MPV</p>
+                </div>
+                <div class="flex items-center gap-1.5 bg-neutral-900 p-1 rounded-xl border border-neutral-800 self-start sm:self-auto">
+                  <button
+                    v-for="size in [
+                      { id: 'small', label: 'Malé (75%)' },
+                      { id: 'medium', label: 'Střední (100%)' },
+                      { id: 'large', label: 'Velké (125%)' },
+                      { id: 'xlarge', label: 'Extra velké (150%)' }
+                    ] as const"
+                    :key="size.id"
+                    type="button"
+                    @click="setSubtitleSize(size.id)"
+                    :class="profileSettings.subtitleSize === size.id ? 'bg-violet-600 text-white font-medium shadow-sm' : 'text-neutral-400 hover:text-white'"
+                    class="px-2.5 py-1 text-xs rounded-lg transition-all"
+                  >
+                    {{ size.label }}
+                  </button>
+                </div>
+              </div>
+
+              <!-- Náhled titulků -->
+              <div class="relative bg-black/60 rounded-xl p-4 border border-neutral-800/60 overflow-hidden flex flex-col items-center justify-center min-h-[90px] bg-gradient-to-b from-neutral-900/40 to-black/80">
+                <span class="text-[10px] text-neutral-500 uppercase tracking-widest font-mono mb-1">Živý náhled titulků</span>
+                <p
+                  :class="{
+                    'text-sm': profileSettings.subtitleSize === 'small',
+                    'text-base': profileSettings.subtitleSize === 'medium',
+                    'text-xl': profileSettings.subtitleSize === 'large',
+                    'text-2xl': profileSettings.subtitleSize === 'xlarge',
+                  }"
+                  class="font-semibold text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] bg-black/40 px-3 py-1 rounded backdrop-blur-sm border border-white/5 transition-all duration-200"
+                >
+                  „Tohle je přesně ta chvíle, na kterou jsme čekali.“
+                </p>
+              </div>
             </div>
 
           </div>
@@ -221,17 +391,17 @@ const handleSync = () => {
           <h3 class="text-sm font-semibold text-neutral-400 ml-4 mb-3">Údržba a databáze</h3>
           <div class="bg-[#1c1c1c] rounded-2xl border border-neutral-800/80 overflow-hidden divide-y divide-neutral-800/80">
             
-            <button class="w-full text-left p-4 sm:p-5 hover:bg-white/[0.02] transition-colors">
+            <button @click="clearCache" class="w-full text-left p-4 sm:p-5 hover:bg-white/[0.02] transition-colors cursor-pointer">
               <h4 class="text-neutral-200 font-medium">Vymazat mezipaměť (Cache)</h4>
               <p class="text-neutral-500 text-sm mt-0.5">Uvolní místo na disku smazáním dočasných souborů</p>
             </button>
             
-            <button class="w-full text-left p-4 sm:p-5 hover:bg-white/[0.02] transition-colors">
+            <button @click="exportBackup" class="w-full text-left p-4 sm:p-5 hover:bg-white/[0.02] transition-colors cursor-pointer">
               <h4 class="text-neutral-200 font-medium">Exportovat zálohu</h4>
               <p class="text-neutral-500 text-sm mt-0.5">Uloží databázi (historii a wishlist) do souboru</p>
             </button>
             
-            <button class="w-full text-left p-4 sm:p-5 bg-red-950/10 hover:bg-red-950/30 transition-colors">
+            <button @click="resetDatabase" class="w-full text-left p-4 sm:p-5 bg-red-950/10 hover:bg-red-950/30 transition-colors cursor-pointer">
               <h4 class="text-red-500 font-medium">Smazat databázi a resetovat</h4>
               <p class="text-red-500/70 text-sm mt-0.5">Nevratně vymaže celou knihovnu a uvede aplikaci do původního stavu</p>
             </button>

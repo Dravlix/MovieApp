@@ -9,6 +9,12 @@ import CollectionsView from './views/CollectionsView.vue'
 import CollectionView from './views/CollectionView.vue'
 import SettingsView from './views/SettingsView.vue'
 
+import ToastContainer from './components/ToastContainer.vue'
+import SearchModal from './components/SearchModal.vue'
+import VideoPlayerModal from './components/VideoPlayerModal.vue'
+import ScanProgressModal from './components/ScanProgressModal.vue'
+import type { MediaItem } from './types'
+
 // Jednoduchý stavový router s podporou parametrů a historie
 const currentRoute = ref('home')
 const currentParams = ref<any>(null)
@@ -35,6 +41,29 @@ const navigate = (route: string, params: any = null) => {
 
 // Zpřístupníme navigační funkci pro všechny potomky (kartičky atd.)
 provide('navigate', navigate)
+
+// Globální modaly a akce
+const isSearchOpen = ref(false)
+const isPlayerOpen = ref(false)
+const activePlayerMedia = ref<MediaItem | null>(null)
+const isScanOpen = ref(false)
+
+const playMedia = (item: MediaItem) => {
+  activePlayerMedia.value = item
+  isPlayerOpen.value = true
+}
+
+const openSearch = () => {
+  isSearchOpen.value = true
+}
+
+const startScan = () => {
+  isScanOpen.value = true
+}
+
+provide('playMedia', playMedia)
+provide('openSearch', openSearch)
+provide('startScan', startScan)
 
 const routes = {
   home: HomeView,
@@ -63,12 +92,22 @@ const closeSettings = (e: MouseEvent) => {
   }
 }
 
+// Globální klávesové zkratky (Cmd+K / Ctrl+K)
+const handleGlobalKeydown = (e: KeyboardEvent) => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault()
+    isSearchOpen.value = !isSearchOpen.value
+  }
+}
+
 onMounted(() => {
   window.addEventListener('click', closeSettings)
+  window.addEventListener('keydown', handleGlobalKeydown)
 })
 
 onUnmounted(() => {
   window.removeEventListener('click', closeSettings)
+  window.removeEventListener('keydown', handleGlobalKeydown)
 })
 </script>
 
@@ -92,12 +131,18 @@ onUnmounted(() => {
           <li @click="navigate('wishlist')" :class="{'text-violet-300 font-bold': currentRoute === 'wishlist'}" class="cursor-pointer transition-colors text-violet-400 hover:text-violet-300">Wishlist</li>
         </ul>
       </div>
-      <div class="flex items-center gap-6">
-        <!-- Search Icon Placeholder -->
-        <button class="text-neutral-300 hover:text-white transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+      <div class="flex items-center gap-4">
+        <!-- Search Button with Badge -->
+        <button
+          @click="isSearchOpen = true"
+          class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-neutral-800/60 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-700/50 transition-all shadow-sm"
+          title="Hledat (Cmd+K)"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 text-violet-400">
             <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
           </svg>
+          <span class="text-xs font-medium hidden sm:inline text-neutral-400">Hledat...</span>
+          <span class="hidden md:inline text-[10px] bg-neutral-700 text-neutral-300 px-1.5 py-0.5 rounded font-mono">⌘K</span>
         </button>
         
         <!-- Nastavení / Settings -->
@@ -122,7 +167,7 @@ onUnmounted(() => {
             <div v-if="isSettingsOpen" class="absolute right-0 mt-2 w-56 rounded-xl shadow-xl bg-neutral-800 border border-neutral-700/60 ring-1 ring-black ring-opacity-5 z-50 p-2 space-y-1">
               
               <!-- Tlačítko vyhledání s fialovým tématem -->
-              <a href="#" @click.prevent="isSettingsOpen = false" class="block w-full px-4 py-2.5 text-sm font-bold text-white bg-violet-600 hover:bg-violet-500 rounded-lg transition-all duration-200 shadow-[0_0_15px_rgba(139,92,246,0.15)] hover:shadow-[0_0_20px_rgba(139,92,246,0.3)] hover:scale-[1.02]">
+              <a href="#" @click.prevent="startScan(); isSettingsOpen = false" class="block w-full px-4 py-2.5 text-sm font-bold text-white bg-violet-600 hover:bg-violet-500 rounded-lg transition-all duration-200 shadow-[0_0_15px_rgba(139,92,246,0.15)] hover:shadow-[0_0_20px_rgba(139,92,246,0.3)] hover:scale-[1.02]">
                 <div class="flex items-center gap-2.5">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-4 h-4">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
@@ -151,6 +196,30 @@ onUnmounted(() => {
 
     <!-- Zobrazení aktuální stránky -->
     <component :is="currentView" :item="currentParams" />
+
+    <!-- Modální okno vyhledávání (Spotlight) -->
+    <SearchModal
+      :isOpen="isSearchOpen"
+      @close="isSearchOpen = false"
+      @select="(item: MediaItem) => navigate('detail', item)"
+    />
+
+    <!-- Video přehrávač -->
+    <VideoPlayerModal
+      :isOpen="isPlayerOpen"
+      :item="activePlayerMedia"
+      @close="isPlayerOpen = false"
+    />
+
+    <!-- Průběh skenování / indexování -->
+    <ScanProgressModal
+      :isOpen="isScanOpen"
+      @close="isScanOpen = false"
+      @finished="() => {}"
+    />
+
+    <!-- Globální plovoucí notifikace (Toasty) -->
+    <ToastContainer />
 
   </div>
 </template>

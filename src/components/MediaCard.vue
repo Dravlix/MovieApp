@@ -2,6 +2,7 @@
 import { inject, ref, onMounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { MediaItem } from '../types';
+import { useToast } from '../composables/useToast';
 
 const props = defineProps<{
   item: MediaItem;
@@ -10,6 +11,8 @@ const props = defineProps<{
 const emit = defineEmits(['wishlistUpdated']);
 
 const navigate = inject<Function>('navigate');
+const playMedia = inject<Function>('playMedia');
+const toast = useToast();
 
 const inWishlist = ref(false);
 const isHovered = ref(false);
@@ -28,6 +31,11 @@ const toggleWishlist = async () => {
   try {
     inWishlist.value = await invoke<boolean>('toggle_wishlist', { id: props.item.id });
     emit('wishlistUpdated', props.item.id, inWishlist.value);
+    if (inWishlist.value) {
+      toast.success(`"${props.item.title}" byl přidán do Wishlistu.`);
+    } else {
+      toast.info(`"${props.item.title}" byl odebrán z Wishlistu.`);
+    }
   } catch (e) {
     console.error(e);
   }
@@ -62,6 +70,12 @@ const handleMouseLeave = () => {
       <!-- Levá část: Plakát -->
       <div class="w-40 md:w-48 h-full flex-none relative">
         <img :src="item.posterUrl" :alt="item.title" class="w-full h-full object-cover" />
+        <!-- Odznáček jazyka nahoře -->
+        <div v-if="item.audioLanguages && item.audioLanguages.length" class="absolute top-2 left-2 z-10 flex items-center gap-1">
+          <span class="text-[9px] font-black tracking-wider bg-black/75 backdrop-blur-md text-violet-300 border border-violet-500/40 px-1.5 py-0.5 rounded shadow">
+            {{ item.audioLanguages.join(' · ') }}
+          </span>
+        </div>
         <!-- Přechody a nadpis -->
         <div class="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-[#141414] opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
         <div class="absolute inset-0 bg-gradient-to-t from-[#141414] via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-3 z-10">
@@ -77,12 +91,17 @@ const handleMouseLeave = () => {
           <div class="flex flex-col items-center gap-1 text-[10px] font-bold text-neutral-400">
             <span class="text-violet-400 uppercase text-center leading-tight">{{ item.genre }}</span>
             <span>{{ item.year }}</span>
-            <span class="border border-neutral-600 px-1 py-0.5 rounded-sm text-[9px] text-white bg-neutral-800 mt-1">HD</span>
+            <div class="flex items-center gap-1 mt-1">
+              <span class="border border-neutral-600 px-1 py-0.5 rounded-sm text-[9px] text-white bg-neutral-800">HD</span>
+              <span v-if="item.audioLanguages && item.audioLanguages.length" class="border border-violet-500/50 px-1 py-0.5 rounded-sm text-[9px] text-violet-300 bg-violet-950/40">
+                {{ item.audioLanguages.join('/') }}
+              </span>
+            </div>
           </div>
 
           <div class="flex flex-col gap-2 mt-2">
             <!-- Přehrát -->
-            <button class="w-8 h-8 flex items-center justify-center bg-white rounded-full hover:bg-neutral-300 hover:scale-110 transition-all shadow-xl text-black">
+            <button @click.stop="playMedia && playMedia(item)" class="w-8 h-8 flex items-center justify-center bg-white rounded-full hover:bg-neutral-300 hover:scale-110 transition-all shadow-xl text-black" title="Přehrát">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4 ml-0.5">
                 <path fill-rule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clip-rule="evenodd" />
               </svg>
